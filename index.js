@@ -8,55 +8,48 @@ const io = socketIo(server);
 
 const users = {}; // Store connected users
 
-// Serve static files from the public directory
 app.use(express.static('public'));
 
-// Handle socket connections
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
-    socket.on('join', (username) => {
-        users[socket.id] = username; // Associate the socket with a username
-        socket.broadcast.emit('user joined', username); // Notify other users
-        console.log(`${username} joined the call.`);
+    socket.on('join', ({ username, room }) => {
+        users[socket.id] = { username, room }; // Store user with their room
+        socket.join(room); // Join the user to the specified room
+        socket.to(room).emit('user joined', username); // Notify others in the room
+        console.log(`${username} joined room ${room}.`);
     });
 
     socket.on('disconnect', () => {
-        const username = users[socket.id];
-        if (username) {
-            delete users[socket.id]; // Remove user from the list
-            socket.broadcast.emit('user left', username); // Notify other users
-            console.log(`${username} left the call.`);
+        const user = users[socket.id];
+        if (user) {
+            socket.to(user.room).emit('user left', user.username);
+            delete users[socket.id]; // Remove user from list
         }
+        console.log('A user disconnected:', socket.id);
     });
 
-    // Handle call user event
-    socket.on('call user', ({ to }) => {
-        socket.broadcast.to(to).emit('incoming call', { from: users[socket.id] });
+    socket.on('start call', ({ room }) => {
+        socket.to(room).emit('incoming call', { from: users[socket.id].username, room });
     });
 
-    // Handle answer call event
-    socket.on('answer call', ({ from }) => {
-        socket.broadcast.to(from).emit('call accepted', { to: users[socket.id] });
+    socket.on('answer call', ({ from, room }) => {
+        socket.to(room).emit('call accepted', { to: users[socket.id].username, room });
     });
 
-    // Handle offer event
-    socket.on('offer', ({ to, offer }) => {
-        socket.broadcast.to(to).emit('offer', { from: users[socket.id], offer });
+    socket.on('offer', ({ to, offer, room }) => {
+        socket.to(room).emit('offer', { from: users[socket.id].username, offer });
     });
 
-    // Handle answer event
-    socket.on('answer', ({ to, answer }) => {
-        socket.broadcast.to(to).emit('answer', { from: users[socket.id], answer });
+    socket.on('answer', ({ to, answer, room }) => {
+        socket.to(room).emit('answer', { from: users[socket.id].username, answer });
     });
 
-    // Handle ICE candidate event
-    socket.on('ice-candidate', ({ to, candidate }) => {
-        socket.broadcast.to(to).emit('ice-candidate', { from: users[socket.id], candidate });
+    socket.on('ice-candidate', ({ to, candidate, room }) => {
+        socket.to(room).emit('ice-candidate', { candidate });
     });
 });
 
-// Start the server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
