@@ -1,11 +1,13 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
+app.use(cors());
 app.use(express.static('public'));
 
 io.on('connection', (socket) => {
@@ -26,6 +28,18 @@ io.on('connection', (socket) => {
 
     socket.on('reject call', (data) => {
         socket.to(data.from).emit('call rejected', { to: socket.username });
+    });
+
+    socket.on('offer', (data) => {
+        socket.to(data.to).emit('offer', { from: socket.username, offer: data.offer });
+    });
+
+    socket.on('answer', (data) => {
+        socket.to(data.to).emit('answer', { from: socket.username, answer: data.answer });
+    });
+
+    socket.on('ice-candidate', (data) => {
+        socket.to(data.to).emit('ice-candidate', { from: socket.username, candidate: data.candidate });
     });
 
     socket.on('disconnect', () => {
