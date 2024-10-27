@@ -1,66 +1,39 @@
-// const path = require('path');
-// const { createServer } = require('http');
-
-// const express = require('express');
-// const { getIO, initIO } = require('./socket22');
-
-// const app = express();
-
-// app.use('/', express.static(path.join(__dirname, 'static')));
-
-// const httpServer = createServer(app);
-
-// let port = process.env.PORT || 3500;
-
-// initIO(httpServer);
-
-// httpServer.listen(port)
-// console.log("Server started on ", port);
-
-// getIO();
-
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
+const socketIo = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = socketIo(server);
 
 app.use(express.static('public'));
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+    console.log('New user connected');
 
-  // Forward signaling messages to the other peer
-  socket.on('offer', (offer) => {
-    socket.broadcast.emit('offer', offer);
-  });
+    socket.on('join', (username) => {
+        socket.username = username;
+        socket.broadcast.emit('user joined', username);
+    });
 
-  socket.on('answer', (answer) => {
-    socket.broadcast.emit('answer', answer);
-  });
+    socket.on('call user', (data) => {
+        socket.to(data.to).emit('incoming call', { from: socket.username });
+    });
 
-  socket.on('candidate', (candidate) => {
-    socket.broadcast.emit('candidate', candidate);
-  });
+    socket.on('answer call', (data) => {
+        socket.to(data.from).emit('call accepted', { to: socket.username });
+    });
 
-  // Handle call hang-up
-  socket.on('hangup', () => {
-    socket.broadcast.emit('hangup');
-  });
+    socket.on('reject call', (data) => {
+        socket.to(data.from).emit('call rejected', { to: socket.username });
+    });
 
-  // Handle mute/unmute status
-  socket.on('muteStatus', (isMuted) => {
-    socket.broadcast.emit('muteStatus', isMuted);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-  });
+    socket.on('disconnect', () => {
+        console.log('User disconnected');
+    });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
