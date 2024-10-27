@@ -1,53 +1,63 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-app.use(cors());
+const users = {}; // Store connected users
+
+// Serve static files from the public directory
 app.use(express.static('public'));
 
+// Handle socket connections
 io.on('connection', (socket) => {
-    console.log('New user connected');
+    console.log('A user connected:', socket.id);
 
     socket.on('join', (username) => {
-        socket.username = username;
-        socket.broadcast.emit('user joined', username);
-    });
-
-    socket.on('call user', (data) => {
-        socket.to(data.to).emit('incoming call', { from: socket.username });
-    });
-
-    socket.on('answer call', (data) => {
-        socket.to(data.from).emit('call accepted', { to: socket.username });
-    });
-
-    socket.on('reject call', (data) => {
-        socket.to(data.from).emit('call rejected', { to: socket.username });
-    });
-
-    socket.on('offer', (data) => {
-        socket.to(data.to).emit('offer', { from: socket.username, offer: data.offer });
-    });
-
-    socket.on('answer', (data) => {
-        socket.to(data.to).emit('answer', { from: socket.username, answer: data.answer });
-    });
-
-    socket.on('ice-candidate', (data) => {
-        socket.to(data.to).emit('ice-candidate', { from: socket.username, candidate: data.candidate });
+        users[socket.id] = username; // Associate the socket with a username
+        socket.broadcast.emit('user joined', username); // Notify other users
+        console.log(`${username} joined the call.`);
     });
 
     socket.on('disconnect', () => {
-        console.log('User disconnected');
+        const username = users[socket.id];
+        if (username) {
+            delete users[socket.id]; // Remove user from the list
+            socket.broadcast.emit('user left', username); // Notify other users
+            console.log(`${username} left the call.`);
+        }
+    });
+
+    // Handle call user event
+    socket.on('call user', ({ to }) => {
+        socket.broadcast.to(to).emit('incoming call', { from: users[socket.id] });
+    });
+
+    // Handle answer call event
+    socket.on('answer call', ({ from }) => {
+        socket.broadcast.to(from).emit('call accepted', { to: users[socket.id] });
+    });
+
+    // Handle offer event
+    socket.on('offer', ({ to, offer }) => {
+        socket.broadcast.to(to).emit('offer', { from: users[socket.id], offer });
+    });
+
+    // Handle answer event
+    socket.on('answer', ({ to, answer }) => {
+        socket.broadcast.to(to).emit('answer', { from: users[socket.id], answer });
+    });
+
+    // Handle ICE candidate event
+    socket.on('ice-candidate', ({ to, candidate }) => {
+        socket.broadcast.to(to).emit('ice-candidate', { from: users[socket.id], candidate });
     });
 });
 
+// Start the server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });
